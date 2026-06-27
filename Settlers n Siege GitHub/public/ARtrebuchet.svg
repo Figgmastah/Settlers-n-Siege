@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect width="240" height="160" rx="16" fill="#0f172a" />
+  <rect x="64" y="52" width="96" height="52" rx="10" fill="#fb923c" />
+  <rect x="164" y="60" width="24" height="36" rx="6" fill="#38bdf8" />
+  <text x="76" y="84" fill="#fff" font-size="18" font-family="Arial, sans-serif">AR Trebuchet</text>
+</svg>

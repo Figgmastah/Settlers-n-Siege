@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect width="240" height="160" rx="16" fill="#0f172a" />
+  <rect x="72" y="44" width="96" height="58" rx="10" fill="#34d399" />
+  <path d="M174 46 L208 80 L174 114 Z" fill="#f59e0b" />
+  <text x="74" y="80" fill="#fff" font-size="16" font-family="Arial, sans-serif">MR Siege Ram</text>
+</svg>

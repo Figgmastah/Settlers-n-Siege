@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect width="240" height="160" rx="16" fill="#0f172a" />
+  <circle cx="74" cy="82" r="24" fill="#f59e0b" />
+  <path d="M104 60 L164 60 L164 104 L104 104 Z" fill="#34d399" />
+  <text x="102" y="86" fill="#fff" font-size="18" font-family="Arial, sans-serif">MR Villager</text>
+</svg>

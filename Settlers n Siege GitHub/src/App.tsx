@@ -18,6 +18,7 @@ type Building = {
   health: string;
   popBonus?: number;
   upgrade?: BuildingUpgrade;
+  requiresTownhall2?: boolean;
 };
 
 type Unit = {
@@ -63,7 +64,7 @@ const buildings: Building[] = [
       id: 'townhall2',
       name: 'Townhall level 2',
       cost: { wood: 10, stone: 20, gold: 10 },
-      health: '1-126',
+      health: '1-120',
       popBonus: 5,
     },
   },
@@ -112,7 +113,7 @@ const buildings: Building[] = [
       id: 'mill2',
       name: 'Mill level 2',
       cost: { wood: 6, stone: 4 },
-      health: '1-42',
+      health: '1-36',
     },
   },
   {
@@ -136,6 +137,14 @@ const buildings: Building[] = [
     space: 4,
     cost: { wood: 20 },
     health: '1-84',
+  },
+  {
+    id: 'church',
+    name: 'Church',
+    space: 6,
+    cost: { wood: 18, stone: 2 },
+    health: '1-96',
+    requiresTownhall2: true,
   },
   {
     id: 'castle',
@@ -228,12 +237,23 @@ const units: Unit[] = [
     id: 'horseman',
     name: 'Horseman',
     popCost: 5,
-    cost: {},
+    cost: { food: 6, gold: 8 },
     feast: 4,
     health: '1-36',
     damage: 3,
     moveCost: 2,
     special: 'Moving 5 tiles costs 2 actions',
+  },
+  {
+    id: 'elephant_archer',
+    name: 'Elephant archer',
+    popCost: 6,
+    cost: { food: 10, gold: 8 },
+    feast: 5,
+    health: '1-54',
+    damage: 2,
+    moveCost: 1,
+    special: 'Damage 20 at the tile right in front of the elephant archer.',
   },
   {
     id: 'siege_ram',
@@ -336,6 +356,13 @@ function App() {
   const [arrowSharpness, setArrowSharpness] = useState(0);
   const [firingDepth, setFiringDepth] = useState(3);
   const [actionBonuses, setActionBonuses] = useState(0);
+  const [satiatedSouls, setSatiatedSouls] = useState(0);
+  const [relocationBlessings, setRelocationBlessings] = useState(0);
+  const [resurrectionBlessings, setResurrectionBlessings] = useState(0);
+  const [resourceDepleted, setResourceDepleted] = useState(false);
+  const [activeRange, setActiveRange] = useState<{ unitId: string; type: 'attack' | 'move'; imageName: string } | null>(null);
+
+  const hasChurch = (buildingCounts.church || 0) > 0;
 
   const populationUsed = useMemo(() => {
     return units.reduce((sum, unit) => sum + (unitCounts[unit.id] || 0) * unit.popCost, 0);
@@ -348,6 +375,21 @@ function App() {
       return sum + baseCount * (building.popBonus || 0) + upgradeCount * (building.upgrade?.popBonus || 0);
     }, basePopulationLimit);
   }, [buildingCounts]);
+
+  const getRangeImageName = (unitId: string, type: 'attack' | 'move') => {
+    const unitImageKey = {
+      villager: 'villager',
+      swordman: 'swordsman',
+      pikeman: 'pikeman',
+      archer: 'archer',
+      horseman: 'horseman',
+      elephant_archer: 'elephant_archer',
+      siege_ram: 'siege_ram',
+      trebuchet: 'trebuchet',
+    }[unitId] ?? unitId;
+
+    return `${type === 'attack' ? 'AR' : 'MR'}${unitImageKey}`;
+  };
 
   const townhall2Count = useMemo(() => {
     return buildingCounts['townhall2'] || 0;
@@ -399,11 +441,26 @@ function App() {
 
   const gatherResource = (key: ResourceKey) => {
     const value = Math.floor(Math.random() * 6) + 1;
+    if (value === 6) {
+      setResourceDepleted(true);
+      setTimeout(() => setResourceDepleted(false), 2000);
+    }
     updateResource(key, 1);
     setGatherDiceResult(value);
   };
 
+  const fishAction = (mode: 'fish' | 'rain') => {
+    const roll = Math.floor(Math.random() * 6) + 1;
+    setGatherDiceResult(roll);
+    if (mode === 'fish') {
+      if (roll === 1) updateResource('food', 1);
+    } else {
+      if (roll !== 1) updateResource('food', 1);
+    }
+  };
+
   const build = (building: Building) => {
+    if (building.requiresTownhall2 && townhall2Count === 0) return;
     if (!canAfford(building.cost)) return;
     spendResources(building.cost);
     setBuildingCounts((current) => ({ ...current, [building.id]: (current[building.id] || 0) + 1 }));
@@ -458,12 +515,12 @@ function App() {
 
   const trainUnit = (unit: Unit) => {
     if (!canAfford(unit.cost)) return;
-    if (unit.id !== 'villager' && (unitCounts.villager || 0) <= 0) return;
+    if (unit.id !== 'villager' && unit.id !== 'siege_ram' && unit.id !== 'trebuchet' && (unitCounts.villager || 0) <= 0) return;
     if (populationUsed + unit.popCost > maxPopulation) return;
     spendResources(unit.cost);
     setUnitCounts((current) => {
       const next = { ...current, [unit.id]: (current[unit.id] || 0) + 1 };
-      if (unit.id !== 'villager') {
+      if (unit.id !== 'villager' && unit.id !== 'siege_ram' && unit.id !== 'trebuchet') {
         next.villager = Math.max(0, (current.villager || 0) - 1);
       }
       return next;
@@ -476,8 +533,13 @@ function App() {
       const count = current[unitId] || 0;
       return { ...current, [unitId]: Math.max(0, count - 1) };
     });
-    if (resources.food < 0 && unit) {
-      updateResource('food', unit.feast);
+    if (!unit || !hasChurch) return;
+    if (unit.id === 'horseman' || unit.id === 'elephant_archer') {
+      setSatiatedSouls(s => s + 2);
+    } else if (unit.id === 'siege_ram' || unit.id === 'trebuchet') {
+      return;
+    } else {
+      setSatiatedSouls(s => s + 1);
     }
   };
 
@@ -520,6 +582,32 @@ function App() {
     setDiceTabResult(value);
   };
 
+  const redeemForResource = (res: ResourceKey) => {
+    if (satiatedSouls < 1) return;
+    setSatiatedSouls(s => s - 1);
+    updateResource(res, 1);
+  };
+
+  const redeemBlessing = (type: 'relocation' | 'resurrection') => {
+    if (type === 'relocation') {
+      if (satiatedSouls < 5) return;
+      setSatiatedSouls(s => s - 5);
+      setRelocationBlessings(b => b + 1);
+    } else {
+      if (satiatedSouls < 10) return;
+      setSatiatedSouls(s => s - 10);
+      setResurrectionBlessings(b => b + 1);
+    }
+  };
+
+  const useBlessing = (type: 'relocation' | 'resurrection') => {
+    if (type === 'relocation') {
+      setRelocationBlessings(b => Math.max(0, b - 1));
+    } else {
+      setResurrectionBlessings(b => Math.max(0, b - 1));
+    }
+  };
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: 16 }}>
       <header style={{ marginBottom: 24 }}>
@@ -530,7 +618,7 @@ function App() {
       </header>
 
       <nav style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
-        {[1, 2, 3, 4, 5].map((tab) => (
+        {[1, 2, 3, 4, 5, 6, 7].map((tab) => (
           <button
             key={tab}
             onClick={() => setCurrentTab(tab)}
@@ -541,12 +629,17 @@ function App() {
               borderRadius: 8,
             }}
           >
-            {['Resources', 'Dices', 'Builds', 'Units', 'Tech'][tab - 1]}
+            {['Resources', 'Dices', 'Builds', 'Units', 'Tech', 'Blessings', 'Other'][tab - 1]}
           </button>
         ))}
       </nav>
 
       <section style={{ background: '#0f172a', borderRadius: 16, padding: 20, boxShadow: '0 0 0 1px #1e293b' }}>
+        {resourceDepleted && (
+          <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 1000, color: '#f87171', fontWeight: 'bold', background: 'rgba(15, 23, 42, 0.95)', padding: '16px 24px', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+            Resource deplenished
+          </div>
+        )}
         {currentTab === 1 && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 20 }}>
@@ -554,9 +647,19 @@ function App() {
                 <div key={key} style={{ background: '#111827', borderRadius: 16, padding: 16 }}>
                   <h2 style={{ margin: 0, textTransform: 'capitalize' }}>{key}</h2>
                   <p style={{ margin: '8px 0 16px', fontSize: 24 }}>{amount}</p>
-                  <button onClick={() => gatherResource(key as ResourceKey)} style={buttonStyle}>Gather</button>
-                  <button onClick={() => updateResource(key as ResourceKey, 1)} style={buttonStyle}>+1</button>
-                  <button onClick={() => updateResource(key as ResourceKey, -1)} style={buttonStyle}>-1</button>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => gatherResource(key as ResourceKey)} style={buttonStyle} disabled={resourceDepleted}>Gather</button>
+                    <button onClick={() => updateResource(key as ResourceKey, 10)} style={buttonStyle}>+10</button>
+                    <button onClick={() => updateResource(key as ResourceKey, 1)} style={buttonStyle}>+1</button>
+                    <button onClick={() => updateResource(key as ResourceKey, -1)} style={buttonStyle}>-1</button>
+                    <button onClick={() => updateResource(key as ResourceKey, -10)} style={buttonStyle}>-10</button>
+                    {key === 'food' ? (
+                      <>
+                        <button onClick={() => fishAction('fish')} style={buttonStyle} disabled={resourceDepleted}>Fish</button>
+                        <button onClick={() => fishAction('rain')} style={buttonStyle} disabled={resourceDepleted}>Rain Fish</button>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>
@@ -576,6 +679,86 @@ function App() {
               </div>
             </div>
           </>
+        )}
+
+        {currentTab === 6 && (
+          <div style={{ display: 'grid', gap: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>Blessings</h3>
+              <div style={{ color: '#94a3b8' }}>Satiated souls: {satiatedSouls}</div>
+            </div>
+
+            <div style={panelStyle}>
+              {!hasChurch && <p style={{ color: '#f87171', margin: '0 0 12px 0', fontSize: 12 }}>Requires: 1 Church</p>}
+              <h4 style={{ marginTop: 0 }}>Redeem for resources (1 soul)</h4>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                <button onClick={() => redeemForResource('food')} style={hasChurch && satiatedSouls >= 1 ? buttonStyle : disabledButtonStyle} disabled={!hasChurch || satiatedSouls < 1}>Redeem 1 → Food</button>
+                <button onClick={() => redeemForResource('wood')} style={hasChurch && satiatedSouls >= 1 ? buttonStyle : disabledButtonStyle} disabled={!hasChurch || satiatedSouls < 1}>Redeem 1 → Wood</button>
+                <button onClick={() => redeemForResource('stone')} style={hasChurch && satiatedSouls >= 1 ? buttonStyle : disabledButtonStyle} disabled={!hasChurch || satiatedSouls < 1}>Redeem 1 → Stone</button>
+                <button onClick={() => redeemForResource('gold')} style={hasChurch && satiatedSouls >= 1 ? buttonStyle : disabledButtonStyle} disabled={!hasChurch || satiatedSouls < 1}>Redeem 1 → Gold</button>
+              </div>
+
+              <h4>Purchase Blessings</h4>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 240 }}>
+                  <p style={{ margin: '4px 0' }}>Relocation blessing (cost: 5 souls)</p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => redeemBlessing('relocation')} style={hasChurch && satiatedSouls >= 5 ? buttonStyle : disabledButtonStyle} disabled={!hasChurch || satiatedSouls < 5}>Redeem</button>
+                    <p style={{ margin: 'auto 0' }}>Owned: {relocationBlessings}</p>
+                    <button onClick={() => useBlessing('relocation')} style={hasChurch && relocationBlessings > 0 ? buttonStyle : disabledButtonStyle} disabled={!hasChurch || relocationBlessings <= 0}>Use</button>
+                  </div>
+                </div>
+                <div style={{ flex: 1, minWidth: 240 }}>
+                  <p style={{ margin: '4px 0' }}>Resurrection blessing (cost: 10 souls)</p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => redeemBlessing('resurrection')} style={hasChurch && satiatedSouls >= 10 ? buttonStyle : disabledButtonStyle} disabled={!hasChurch || satiatedSouls < 10}>Redeem</button>
+                    <p style={{ margin: 'auto 0' }}>Owned: {resurrectionBlessings}</p>
+                    <button onClick={() => useBlessing('resurrection')} style={hasChurch && resurrectionBlessings > 0 ? buttonStyle : disabledButtonStyle} disabled={!hasChurch || resurrectionBlessings <= 0}>Use</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {currentTab === 7 && (
+          <div style={{ display: 'grid', gap: 16, gridTemplateColumns: '1.2fr 1fr' }}>
+            <div style={panelStyle}>
+              <h3 style={{ margin: 0 }}>Mobs</h3>
+              <div style={{ marginTop: 12 }}>
+                <h4>Ogre</h4>
+                <p style={{ margin: '4px 0' }}>Description: The Ogre. Might or might not be in your local forest. His immense club and sheer ferocity makes him 1-hit everything in his path. When found he uses his 2 actions to move the shortest path towards the closest building or unit. Whenever he walks on a resource, it is destroyed. He uses 1 action when attacking.</p>
+                <p style={{ margin: '4px 0' }}>Health: 1-114</p>
+                <p style={{ margin: '4px 0' }}>Damage: ∞</p>
+                <p style={{ margin: '4px 0' }}>Actions per round: 2</p>
+              </div>
+            </div>
+            <div style={panelStyle}>
+              <h3 style={{ margin: 0 }}>Events</h3>
+              <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
+                <div>
+                  <h4 style={{ margin: '0 0 4px' }}>Meteorite</h4>
+                  <p style={{ margin: 0, color: '#cbd5e1' }}>A die is rolled and the meteor lands on the tile with the corresponding value of the value the die that got rolled got. If a meteor lands on resources, buildings or people, they are destroyed. When a meteor is harvested, the player gets 3 free upgrades that he must enact at once.</p>
+                </div>
+                <div>
+                  <h4 style={{ margin: '0 0 4px' }}>Wind</h4>
+                  <p style={{ margin: 0, color: '#cbd5e1' }}>Increases movement speed by +1 for units moving with the wind and decreases it by 1 for units moving against the wind. The wind can blow from north to south, west to east, south to north, or east to west.</p>
+                </div>
+                <div>
+                  <h4 style={{ margin: '0 0 4px' }}>Rain</h4>
+                  <p style={{ margin: 0, color: '#cbd5e1' }}>Fishing harvest mechanism is reversed: Instead of getting success at dice roll 1 and failure at 2-6, it is the other way around. Food produced from a villager at mills is also doubled.</p>
+                </div>
+                <div>
+                  <h4 style={{ margin: '0 0 4px' }}>Famine</h4>
+                  <p style={{ margin: 0, color: '#cbd5e1' }}>When active, producing food from mills is deactivated.</p>
+                </div>
+                <div>
+                  <h4 style={{ margin: '0 0 4px' }}>Christmas</h4>
+                  <p style={{ margin: 0, color: '#cbd5e1' }}>Attacking is disabled for the current round of turns.</p>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {currentTab === 2 && (
@@ -599,7 +782,7 @@ function App() {
             {buildings.map((building) => {
               const baseCount = buildingCounts[building.id] || 0;
               const upgradeCount = building.upgrade ? buildingCounts[building.upgrade.id] || 0 : 0;
-              const canBuild = canAfford(building.cost);
+              const canBuild = canAfford(building.cost) && (!building.requiresTownhall2 || townhall2Count > 0);
               const canUpgrade = building.upgrade && baseCount > 0 && canAfford(building.upgrade.cost);
               return (
                 <div key={building.id} style={panelStyle}>
@@ -610,7 +793,13 @@ function App() {
                       <p style={{ margin: '8px 0' }}>Health: {building.health}</p>
                       {building.popBonus ? <p style={{ margin: '8px 0' }}>Population limit +{building.popBonus}</p> : null}
                       <p style={{ margin: '8px 0' }}>Count: {baseCount}</p>
-                      {upgradeCount > 0 ? <p style={{ margin: '8px 0' }}>{building.upgrade?.name}: {upgradeCount}</p> : null}
+                      {building.requiresTownhall2 && townhall2Count === 0 && <p style={{ color: '#f87171', margin: '4px 0', fontSize: 12 }}>Requires: 1 Townhall Level 2</p>}
+                      {upgradeCount > 0 ? (
+                        <>
+                          <p style={{ margin: '8px 0' }}>{building.upgrade?.name}: {upgradeCount}</p>
+                          <p style={{ margin: '4px 0' }}>Health: {building.upgrade?.health}</p>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
@@ -633,64 +822,101 @@ function App() {
           </div>
         )}
 
-        {currentTab === 4 && (
-          <div style={{ display: 'grid', gap: 16 }}>
-            {units.map((unit) => {
-              const canTrain = canAfford(unit.cost) && (unit.id === 'villager' || (unitCounts.villager || 0) > 0) && populationUsed + unit.popCost <= maxPopulation;
-              // compute displayed damage (base + tech bonuses)
-              let computedDamage = unit.damage;
-              let damageBonusLabel = '';
-              if (unit.id === 'swordman' || unit.id === 'horseman') {
-                if (swordSharpness > 0) {
-                  computedDamage = unit.damage + swordSharpness;
-                  damageBonusLabel = `+${swordSharpness} from sword sharpness`;
+          {currentTab === 4 && (
+            <div style={{ display: 'grid', gap: 16 }}>
+              {units.map((unit) => {
+                const count = unitCounts[unit.id] || 0;
+                const hasTownhall = (buildingCounts.townhall || 0) > 0 || (buildingCounts.townhall2 || 0) > 0;
+                const hasBarracks = (buildingCounts.barracks || 0) > 0;
+                const hasArcheryRange = (buildingCounts.archery_range || 0) > 0;
+                const hasStable = (buildingCounts.stable || 0) > 0;
+                const hasSiegeWorkshop = (buildingCounts.siege_workshop || 0) > 0;
+                
+                let meetsRequirements = true;
+                if (unit.id === 'villager' && !hasTownhall) meetsRequirements = false;
+                if (unit.id === 'swordman' && !hasBarracks) meetsRequirements = false;
+                if (unit.id === 'pikeman' && !hasBarracks) meetsRequirements = false;
+                if (unit.id === 'horseman' && (!hasBarracks || !hasStable)) meetsRequirements = false;
+                if (unit.id === 'archer' && !hasArcheryRange) meetsRequirements = false;
+                if (unit.id === 'elephant_archer' && (!hasArcheryRange || !hasStable)) meetsRequirements = false;
+                if (unit.id === 'siege_ram' && !hasSiegeWorkshop) meetsRequirements = false;
+                if (unit.id === 'trebuchet' && !hasSiegeWorkshop) meetsRequirements = false;
+                
+                const canTrain = canAfford(unit.cost) && (unit.id === 'villager' || unit.id === 'siege_ram' || unit.id === 'trebuchet' || (unitCounts.villager || 0) > 0) && populationUsed + unit.popCost <= maxPopulation && meetsRequirements;
+                // compute displayed damage (base + tech bonuses)
+                let computedDamage = unit.damage;
+                let damageBonusLabel = '';
+                if (unit.id === 'swordman' || unit.id === 'horseman') {
+                  if (swordSharpness > 0) {
+                    computedDamage = unit.damage + swordSharpness;
+                    damageBonusLabel = `+${swordSharpness} from sword sharpness`;
+                  }
                 }
-              }
-              if (unit.id === 'archer') {
-                if (arrowSharpness > 0) {
-                  computedDamage = unit.damage + arrowSharpness;
-                  damageBonusLabel = `+${arrowSharpness} from arrow sharpness`;
+                if (unit.id === 'archer') {
+                  if (arrowSharpness > 0) {
+                    computedDamage = unit.damage + arrowSharpness;
+                    damageBonusLabel = `+${arrowSharpness} from arrow sharpness`;
+                  }
                 }
-              }
-              if (unit.id === 'pikeman') {
-                if (pikeSharpness > 0) {
-                  computedDamage = unit.damage + pikeSharpness;
-                  damageBonusLabel = `+${pikeSharpness} from pike sharpness`;
+                if (unit.id === 'pikeman') {
+                  if (pikeSharpness > 0) {
+                    computedDamage = unit.damage + pikeSharpness;
+                    damageBonusLabel = `+${pikeSharpness} from pike sharpness`;
+                  }
                 }
-              }
 
-              return (
-                <div key={unit.id} style={panelStyle}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
-                    <div>
-                      <h3 style={{ margin: 0 }}>{unit.name}</h3>
-                      <p style={{ margin: '8px 0' }}>Pop cost: {unit.popCost}</p>
-                      <p style={{ margin: '8px 0' }}>Feast: {unit.feast}</p>
-                      <p style={{ margin: '8px 0' }}>Health: {unit.health}</p>
-                      <p style={{ margin: '8px 0' }}>Damage: {computedDamage}</p>
-                      {damageBonusLabel && <p style={{ margin: '4px 0', color: '#94a3b8', fontSize: 12 }}>{damageBonusLabel}</p>}
-                      {unit.id === 'swordman' && shieldBonus > 0 && <p style={{ margin: '8px 0' }}>Shield: {shieldBonus}</p>}
-                      {unit.id === 'archer' && firingDepth < 3 && <p style={{ margin: '8px 0' }}>Firing depth: {firingDepth}</p>}
-                      {unit.id === 'archer' && (techLevels['bow_quality'] || 0) >= 2 && <p style={{ margin: '8px 0' }}>+1 range from bow quality level 2</p>}
-                      <p style={{ margin: '8px 0' }}>Move cost: {unit.moveCost}</p>
-                      {unit.special ? <p style={{ margin: '8px 0' }}>Special: {unit.special}</p> : null}
+                return (
+                  <div key={unit.id} style={panelStyle}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+                      <div>
+                        <h3 style={{ margin: 0 }}>{unit.id === 'swordman' ? 'Swordsman' : unit.name}</h3>
+                        <p style={{ margin: '8px 0' }}>Pop cost: {unit.popCost}</p>
+                        <p style={{ margin: '8px 0' }}>Feast: {unit.feast}</p>
+                        <p style={{ margin: '8px 0' }}>Health: {unit.health}</p>
+                        <p style={{ margin: '8px 0' }}>Damage: {computedDamage}</p>
+                        {damageBonusLabel && <p style={{ margin: '4px 0', color: '#94a3b8', fontSize: 12 }}>{damageBonusLabel}</p>}
+                        {unit.id === 'swordman' && shieldBonus > 0 && <p style={{ margin: '8px 0' }}>Shield: {shieldBonus}</p>}
+                        {unit.id === 'archer' && firingDepth < 3 && <p style={{ margin: '8px 0' }}>Firing depth: {firingDepth}</p>}
+                        {unit.id === 'archer' && (techLevels['bow_quality'] || 0) >= 2 && <p style={{ margin: '8px 0' }}>+1 range from bow quality level 2</p>}
+                        <p style={{ margin: '8px 0' }}>Move cost: {unit.moveCost}</p>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '8px 0' }}>
+                          <button onClick={() => setActiveRange((current) => current?.unitId === unit.id && current?.type === 'attack' ? null : { unitId: unit.id, type: 'attack', imageName: getRangeImageName(unit.id, 'attack') })} style={buttonStyle}>Attack range</button>
+                          <button onClick={() => setActiveRange((current) => current?.unitId === unit.id && current?.type === 'move' ? null : { unitId: unit.id, type: 'move', imageName: getRangeImageName(unit.id, 'move') })} style={buttonStyle}>Move range</button>
+                        </div>
+                        {activeRange?.unitId === unit.id && (
+                          <div style={{ margin: '8px 0', padding: 12, background: '#0f172a', borderRadius: 12 }}>
+                            <p style={{ margin: '0 0 8px', color: '#cbd5e1' }}>{activeRange.type === 'attack' ? 'Attack range' : 'Move range'}</p>
+                            <img src={`/${activeRange.imageName}.svg`} alt={`${unit.name} ${activeRange.type} range`} style={{ width: '100%', maxWidth: 240, borderRadius: 8 }} />
+                          </div>
+                        )}
+                        {unit.special ? <p style={{ margin: '8px 0' }}>Special: {unit.special}</p> : null}
+                        {unit.id === 'villager' && !hasTownhall && <p style={{ color: '#f87171', margin: '4px 0', fontSize: 12 }}>Requires: 1 Townhall</p>}
+                        {unit.id === 'swordman' && !hasBarracks && <p style={{ color: '#f87171', margin: '4px 0', fontSize: 12 }}>Requires: 1 Barracks</p>}
+                        {unit.id === 'pikeman' && !hasBarracks && <p style={{ color: '#f87171', margin: '4px 0', fontSize: 12 }}>Requires: 1 Barracks</p>}
+                        {unit.id === 'horseman' && !hasBarracks && <p style={{ color: '#f87171', margin: '4px 0', fontSize: 12 }}>Requires: 1 Barracks</p>}
+                        {unit.id === 'archer' && !hasArcheryRange && <p style={{ color: '#f87171', margin: '4px 0', fontSize: 12 }}>Requires: 1 Archery range</p>}
+                        {unit.id === 'horseman' && !hasStable && <p style={{ color: '#f87171', margin: '4px 0', fontSize: 12 }}>Requires: 1 Stable</p>}
+                        {unit.id === 'elephant_archer' && !hasArcheryRange && <p style={{ color: '#f87171', margin: '4px 0', fontSize: 12 }}>Requires: 1 Archery range</p>}
+                        {unit.id === 'elephant_archer' && !hasStable && <p style={{ color: '#f87171', margin: '4px 0', fontSize: 12 }}>Requires: 1 Stable</p>}
+                        {unit.id === 'siege_ram' && !hasSiegeWorkshop && <p style={{ color: '#f87171', margin: '4px 0', fontSize: 12 }}>Requires: 1 Siege workshop</p>}
+                        {unit.id === 'trebuchet' && !hasSiegeWorkshop && <p style={{ color: '#f87171', margin: '4px 0', fontSize: 12 }}>Requires: 1 Siege workshop</p>}
+                      </div>
+                      <div style={{ minWidth: 140, textAlign: 'right' }}>
+                        <p style={{ margin: '0 0 8px' }}>Population: {count}</p>
+                        <button onClick={() => trainUnit(unit)} style={canTrain ? buttonStyle : disabledButtonStyle} disabled={!canTrain}>
+                          {unit.id === 'villager' ? 'Produce' : unit.id === 'siege_ram' || unit.id === 'trebuchet' ? 'Create' : 'Train'}
+                        </button>
+                        <button onClick={() => killUnit(unit.id)} style={count > 0 ? buttonStyle : disabledButtonStyle} disabled={count <= 0}>{unit.id === 'siege_ram' || unit.id === 'trebuchet' ? 'Wrecked' : 'Died'}</button>
+                      </div>
                     </div>
-                    <div style={{ minWidth: 140, textAlign: 'right' }}>
-                      <p style={{ margin: '0 0 8px' }}>Population: {unitCounts[unit.id] || 0}</p>
-                      <button onClick={() => trainUnit(unit)} style={canTrain ? buttonStyle : disabledButtonStyle} disabled={!canTrain}>
-                        {unit.id === 'villager' ? 'Produce' : unit.id === 'siege_ram' || unit.id === 'trebuchet' ? 'Create' : 'Train'}
-                      </button>
-                      <button onClick={() => killUnit(unit.id)} style={buttonStyle}>{unit.id === 'siege_ram' || unit.id === 'trebuchet' ? 'Wrecked' : 'Died'}</button>
+                    <div style={{ marginTop: 10, color: '#94a3b8' }}>
+                      <p style={{ margin: '4px 0' }}>Cost: {Object.entries(unit.cost).map(([key, value]) => `${value} ${key}`).join(' + ') || 'Free'}</p>
                     </div>
                   </div>
-                  <div style={{ marginTop: 10, color: '#94a3b8' }}>
-                    <p style={{ margin: '4px 0' }}>Cost: {Object.entries(unit.cost).map(([key, value]) => `${value} ${key}`).join(' + ') || 'Free'}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
 
         {currentTab === 5 && (
           <div style={{ display: 'grid', gap: 16 }}>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect width="240" height="160" rx="16" fill="#0f172a" />
+  <rect x="74" y="48" width="98" height="58" rx="10" fill="#34d399" />
+  <path d="M174 44 L204 80 L174 116 Z" fill="#f59e0b" />
+  <text x="84" y="84" fill="#fff" font-size="18" font-family="Arial, sans-serif">MR Archer</text>
+</svg>
