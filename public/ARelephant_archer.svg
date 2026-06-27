@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect width="240" height="160" rx="16" fill="#0f172a" />
+  <rect x="66" y="48" width="84" height="58" rx="10" fill="#f59e0b" />
+  <circle cx="168" cy="78" r="28" fill="#38bdf8" />
+  <text x="74" y="84" fill="#fff" font-size="16" font-family="Arial, sans-serif">AR Elephant Archer</text>
+</svg>

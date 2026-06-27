@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect width="240" height="160" rx="16" fill="#0f172a" />
+  <rect x="70" y="54" width="92" height="48" rx="8" fill="#38bdf8" />
+  <path d="M164 52 L196 80 L164 108 Z" fill="#f59e0b" />
+  <text x="74" y="84" fill="#fff" font-size="18" font-family="Arial, sans-serif">MR Swordsman</text>
+</svg>

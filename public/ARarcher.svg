@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect width="240" height="160" rx="16" fill="#0f172a" />
+  <rect x="58" y="54" width="102" height="44" rx="8" fill="#f97316" />
+  <circle cx="168" cy="76" r="28" fill="#38bdf8" />
+  <text x="82" y="82" fill="#fff" font-size="18" font-family="Arial, sans-serif">AR Archer</text>
+</svg>

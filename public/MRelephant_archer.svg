@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect width="240" height="160" rx="16" fill="#0f172a" />
+  <path d="M78 60 L148 60 L126 108 L92 108 Z" fill="#34d399" />
+  <path d="M154 56 L196 80 L154 104 Z" fill="#f59e0b" />
+  <text x="74" y="86" fill="#fff" font-size="16" font-family="Arial, sans-serif">MR Elephant Archer</text>
+</svg>

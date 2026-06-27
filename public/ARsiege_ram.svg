@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect width="240" height="160" rx="16" fill="#0f172a" />
+  <rect x="58" y="54" width="94" height="44" rx="8" fill="#8b5cf6" />
+  <circle cx="166" cy="76" r="24" fill="#38bdf8" />
+  <text x="74" y="82" fill="#fff" font-size="18" font-family="Arial, sans-serif">AR Siege Ram</text>
+</svg>
